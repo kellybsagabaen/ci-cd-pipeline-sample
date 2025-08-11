@@ -1,0 +1,58 @@
+name: Docker CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main # Trigger on pushes to the main branch
+  pull_request:
+    branches:
+      - main # Also trigger on pull requests to the main branch
+
+env:
+  REGISTRY: ghcr.io # Use GitHub Container Registry (GHCR)
+  IMAGE_NAME: ${{ github.repository }} # Uses your GitHub repository name as the image name
+
+jobs:
+  build-scan-push: # A single job covering all steps
+    runs-on: ubuntu-latest # Use a fresh Ubuntu runner
+    permissions:
+      contents: read
+      packages: write # Required to push to GHCR
+      security-events: write # Required for Trivy to publish results to GitHub Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Action to check out your code
+
+      - name: Log in to the Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }} # Your GitHub username
+          password: ${{ secrets.GITHUB_TOKEN }} # GitHub's auto-generated token for actions
+
+      - name: Extract metadata (tags) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} # Define image name for tagging
+          tags: |
+            type=sha,format=short,prefix=
+            type=ref,event=branch # Generates tags like 'main', 'short-sha'
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Build from the current directory (where Dockerfile is)
+          push: true # Push to registry
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} # Use the image that was just built and pushed
+          format: 'github' # Format for GitHub Security tab
+          exit-code: '1' # Fail the job if critical/high vulnerabilities are found
+          severity: 'CRITICAL,HIGH'
+          fail-on-scans: 'true' # Ensure pipeline fails
