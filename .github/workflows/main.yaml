@@ -59,5 +59,3 @@ jobs:
           format: 'github'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
-          # This line has been removed as it's not a valid input for the action
-          # fail-on-scans: 'true'
