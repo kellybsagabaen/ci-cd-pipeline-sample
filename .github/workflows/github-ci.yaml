@@ -10,15 +10,11 @@ on:
 
 env:
   DOCKER_REGISTRY: docker.io
-  # Use the standard github.repository variable which is "owner/repo-name"
   DOCKER_IMAGE_NAME: ${{ github.repository }}
-  # Define a specific tag for scanning to avoid issues with multiple tags
-  SCAN_IMAGE_TAG: main
 
 jobs:
   build-scan-push:
-    # Use the appropriate label for your self-hosted macOS runner
-    runs-on: [self-hosted, macos, x64] # Adjust 'x64' to 'arm64' if needed
+    runs-on: [self-hosted, macos, x64]
 
     permissions:
       contents: read
@@ -42,8 +38,9 @@ jobs:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
           tags: |
             type=sha,format=short,prefix=
-            type=ref,event=branch,enable=${{ github.ref_name == 'main' }}
-            type=latest,enable=${{ github.ref_name == 'main' }}
+            type=ref,event=branch
+            # THIS IS THE CORRECTED SYNTAX
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
@@ -52,13 +49,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # We need to explicitly output the tags for the next step to work correctly
+          outputs: 'tags=${{ steps.meta.outputs.tags }}'
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          # This is the corrected line. It uses a specific, known tag for the scan.
-          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.SCAN_IMAGE_TAG }}
+          # We now get the tags from the 'build-push-action' output for consistency
+          image-ref: ${{ steps.build-and-push.outputs.tags }}
           format: 'github'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
-          # 'fail-on-scans: true' has been removed as it's not a valid input.
