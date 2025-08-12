@@ -1,4 +1,4 @@
-name: Docker CI/CD Pipeline
+name: Docker CI/CD Pipeline (Self-Hosted) # Changed name for clarity
 
 on:
   push:
@@ -14,7 +14,15 @@ env:
 
 jobs:
   build-scan-push: # A single job covering all steps
-    runs-on: ubuntu-latest # Use a fresh Ubuntu runner
+    # --- THIS IS THE KEY CHANGE ---
+    runs-on: self-hosted 
+    # If you assigned a custom label to your runner during configuration (e.g., 'my-mac-runner'),
+    # you can use that label or a combination:
+    # runs-on: [self-hosted, my-mac-runner]
+    # Or for a specific architecture on macOS:
+    # runs-on: [self-hosted, macos, arm64] # or x64
+    # ----------------------------
+
     permissions:
       contents: read
       packages: write # Required to push to GHCR
