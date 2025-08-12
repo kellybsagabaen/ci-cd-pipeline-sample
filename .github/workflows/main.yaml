@@ -1,0 +1,71 @@
+name: CI/CD Pipeline
+
+# This workflow is triggered on pushes to the 'main' branch
+on:
+  push:
+    branches:
+      - main
+
+# Define environment variables
+env:
+  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_TAG: ${{ github.sha }}
+
+# A job is a set of steps that execute on the same runner
+jobs:
+  build-and-scan:
+    # Use an Ubuntu runner
+    runs-on: ubuntu-latest
+
+    # Define the steps for this job
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Log in to the GitHub Container Registry (ghcr.io)
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 3: Build the Docker image
+      - name: Build and push the Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false  # Do not push yet, we'll do that after the scan.
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+      # Step 4: Scan the image with Trivy
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}'
+          format: 'table'
+          output: 'trivy-results.txt'
+          exit-code: '1' # Fails the build if any vulnerability is found
+          severity: 'CRITICAL,HIGH'
+
+  push-to-registry:
+    # This job only runs if the build-and-scan job succeeds
+    runs-on: ubuntu-latest
+    needs: build-and-scan
+
+    steps:
+      # Step 1: Log in to the GitHub Container Registry
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Step 2: Push the built image to the registry
+      - name: Push image to registry
+        run: docker push ghcr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
