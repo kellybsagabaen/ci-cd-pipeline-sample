@@ -1,74 +1,64 @@
-name: Docker CI/CD Pipeline (Docker Hub) # Updated name for clarity
+name: Docker CI/CD Pipeline (Docker Hub)
 
 on:
   push:
     branches:
-      - main # Trigger on pushes to the main branch
+      - main
   pull_request:
     branches:
-      - main # Also trigger on pull requests to the main branch
+      - main
 
 env:
-  # --- CHANGED TO DOCKER HUB REGISTRY ---
-  DOCKER_REGISTRY: docker.io # Use Docker Hub
-  # This constructs the image name for Docker Hub: 'your_dockerhub_username/your_github_repo_name'
-  # Example: if your GitHub repo is 'kellybsagabaen/ci-cd-pipeline-sample', it becomes 'kellybsagabaen/ci-cd-pipeline-sample'
-  # IMPORTANT: Ensure a repository with this exact name exists under your Docker Hub account.
-  DOCKER_IMAGE_NAME: ${{ github.actor }}/${{ github.event.repository.name }}
+  DOCKER_REGISTRY: docker.io
+  # Use the standard github.repository variable which is "owner/repo-name"
+  DOCKER_IMAGE_NAME: ${{ github.repository }}
+  # Define a specific tag for scanning to avoid issues with multiple tags
+  SCAN_IMAGE_TAG: main
 
 jobs:
-  build-scan-push: # A single job covering all steps
-    runs-on: self-hosted
-    # If you assigned custom labels to your runner during configuration, you can use them:
-    # runs-on: [self-hosted, my-mac-runner]
-    # Or for a specific architecture on macOS:
-    # runs-on: [self-hosted, macos, arm64] # or x64
+  build-scan-push:
+    # Use the appropriate label for your self-hosted macOS runner
+    runs-on: [self-hosted, macos, x64] # Adjust 'x64' to 'arm64' if needed
 
     permissions:
       contents: read
-      # 'packages: write' permission is only strictly needed if you were pushing to GitHub Packages (GHCR)
-      # Since we're pushing to Docker Hub, 'packages: write' isn't essential for *this* workflow,
-      # but leaving it won't hurt if you use GHCR for other things.
-      # 'security-events: write' is required for Trivy to publish results to GitHub Security tab.
       security-events: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # Action to check out your code
+        uses: actions/checkout@v4
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
-          # Use your Docker Hub username from a secret
           username: ${{ secrets.DOCKER_USERNAME }}
-          # Use your Docker Hub Personal Access Token (PAT) from a secret
-          password: ${{ secrets.DOCKER_PASSWORD }} # This is where your PAT (dckr_pat...) will be used
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Extract metadata (tags) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # Define image name for tagging, now using Docker Hub registry and image name
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
           tags: |
             type=sha,format=short,prefix=
-            type=ref,event=branch # Generates tags like 'main', 'short-sha'
+            type=ref,event=branch,enable=${{ github.ref_name == 'main' }}
+            type=latest,enable=${{ github.ref_name == 'main' }}
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: . # Build from the current directory (where Dockerfile is)
-          push: true # Push to registry
+          context: .
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          # Use the image that was just built and pushed, referencing the Docker Hub path
-          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.meta.outputs.version }}
-          format: 'github' # Format for GitHub Security tab
-          exit-code: '1' # Fail the job if critical/high vulnerabilities are found
+          # This is the corrected line. It uses a specific, known tag for the scan.
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.SCAN_IMAGE_TAG }}
+          format: 'github'
+          exit-code: '1'
           severity: 'CRITICAL,HIGH'
-          fail-on-scans: 'true' # Ensure pipeline fails
+          # 'fail-on-scans: true' has been removed as it's not a valid input.
