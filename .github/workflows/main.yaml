@@ -10,12 +10,12 @@ on:
 
 env:
   DOCKER_REGISTRY: docker.io
-  # Correctly constructs the image name using the repository name
   DOCKER_IMAGE_NAME: ${{ github.repository }}
+  # Define a specific tag for scanning to avoid issues with multiple tags
+  SCAN_IMAGE_TAG: main
 
 jobs:
   build-scan-push:
-    # Use a self-hosted runner with the appropriate labels
     runs-on: [self-hosted, linux, x64] # Example labels, adjust as needed
 
     permissions:
@@ -54,10 +54,10 @@ jobs:
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          # Use the full registry path to reference the image for scanning
-          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ steps.meta.outputs.tags }}
+          # Use a specific, single tag for the image to scan
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.SCAN_IMAGE_TAG }}
           format: 'github'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
-          # 'fail-on-scans' is not a valid Trivy-action input. Use 'exit-code' instead.
-          # The job will fail because of exit-code '1'.
+          # This line has been removed as it's not a valid input for the action
+          # fail-on-scans: 'true'
