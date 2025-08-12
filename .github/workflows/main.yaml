@@ -16,7 +16,9 @@ env:
 
 jobs:
   build-scan-push:
-    runs-on: [self-hosted, linux, x64] # Example labels, adjust as needed
+    # THIS HAS BEEN CORRECTED: Use the appropriate label for your self-hosted Mac runner.
+    # The 'linux' label will cause the job to never run on your Mac.
+    runs-on: [self-hosted, macos, x64] # Or use 'arm64' if you have an M-series Mac
 
     permissions:
       contents: read
@@ -40,8 +42,10 @@ jobs:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}
           tags: |
             type=sha,format=short,prefix=
-            type=ref,event=branch,enable=${{ github.ref_name == 'main' }}
-            type=latest,enable=${{ github.ref_name == 'main' }}
+            type=ref,event=branch
+            # THIS HAS BEEN CORRECTED: The syntax 'type=latest' is invalid.
+            # We use 'type=raw,value=latest' to apply a conditional 'latest' tag.
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
@@ -54,7 +58,6 @@ jobs:
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
-          # Use a specific, single tag for the image to scan
           image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE_NAME }}:${{ env.SCAN_IMAGE_TAG }}
           format: 'github'
           exit-code: '1'
